@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tmux-monitor"
+version = "0.1.0"
+description = "Heartbeat daemon that monitors tmux sessions, detects coding agents, and generates LLM summaries for coordination."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+web = ["streamlit>=1.50"]
+dev = ["pytest>=9.0"]
+
+[project.scripts]
+tmux-monitor = "tmux_monitor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["tmux_monitor*"]

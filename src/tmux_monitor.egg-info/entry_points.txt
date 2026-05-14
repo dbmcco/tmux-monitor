@@ -1,0 +1,2 @@
+[console_scripts]
+tmux-monitor = tmux_monitor.cli:main

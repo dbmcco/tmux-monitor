@@ -1,0 +1,6 @@
+
+[dev]
+pytest>=9.0
+
+[web]
+streamlit>=1.50
