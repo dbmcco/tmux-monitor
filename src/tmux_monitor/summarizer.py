@@ -49,7 +49,7 @@ class PaneSummary:
         }
 
 
-def _call_ollama(model: str, prompt: str, timeout: int = 60) -> str:
+def _call_ollama(model: str, prompt: str, timeout: int = 90) -> str:
     try:
         result = subprocess.run(
             [

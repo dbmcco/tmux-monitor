@@ -151,9 +151,21 @@ def run_heartbeat(config: TmuxMonitorConfig) -> dict[str, Any]:
                 if log_path.exists() and log_path.stat().st_size > 0:
                     agent_panes[pane.qualified_id] = log_path
 
-    if agent_panes:
+    _last_summary_at = known.get("last_summary_at", "")
+    _should_summarize = bool(agent_panes)
+    if _should_summarize and _last_summary_at:
+        import datetime as _dt2
+        try:
+            _last_dt = _dt2.datetime.fromisoformat(_last_summary_at)
+            _elapsed = (_dt2.datetime.now(_dt2.timezone.utc) - _last_dt).total_seconds()
+            _should_summarize = _elapsed >= config.llm_summary_interval_seconds
+        except ValueError:
+            _should_summarize = True
+
+    if _should_summarize and agent_panes:
         try:
             summaries = run_summarization_cycle(config, agent_panes, summaries)
+            _last_summary_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
         except Exception as exc:
             print(f"tmux-monitor: summarization error: {exc}", file=sys.stderr)
 
@@ -166,6 +178,7 @@ def run_heartbeat(config: TmuxMonitorConfig) -> dict[str, Any]:
         "summaries": summaries,
         "active_since": active_since,
         "session_created_at": session_created_at,
+        "last_summary_at": _last_summary_at,
     }
     save_known_sessions(config, new_known)
 
