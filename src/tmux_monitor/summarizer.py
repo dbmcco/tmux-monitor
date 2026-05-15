@@ -10,7 +10,7 @@ from typing import Any
 
 from tmux_monitor.config import TmuxMonitorConfig
 
-_DEFAULT_MODEL = "hermes3:8b"
+_DEFAULT_MODEL = "granite4.1:30b"
 _OLLAMA_URL = "http://localhost:11434"
 
 _SUMMARY_PROMPT = """\
