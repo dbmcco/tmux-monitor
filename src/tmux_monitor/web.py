@@ -117,7 +117,8 @@ st.dataframe(
     },
 )
 
-auto = st.sidebar.checkbox("Auto-refresh (5s)", value=True)
+# Auto-refresh inline — no sidebar
+auto = st.checkbox("Auto-refresh (5s)", value=True)
 if auto:
     time.sleep(5)
     st.rerun()
