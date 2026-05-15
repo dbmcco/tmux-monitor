@@ -67,3 +67,7 @@ class TmuxMonitorConfig:
     @property
     def known_sessions_path(self) -> Path:
         return self.state_dir / "known_sessions.json"
+
+    @property
+    def resume_manifest_path(self) -> Path:
+        return self.state_dir / "resume-manifest.json"
