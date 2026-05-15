@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import subprocess
 import sys
@@ -13,6 +14,10 @@ from tmux_monitor.relevance import (
     format_relevant_json,
     format_relevant_text,
 )
+from tmux_monitor.resume import read_resume_manifest, format_snapshot_text, generate_resume_script
+from tmux_monitor.hygiene import find_stale_panes, format_stale_report, kill_panes
+from tmux_monitor.discovery import discover_all
+from tmux_monitor.detection import classify_pane
 
 
 def _load_config(args: argparse.Namespace) -> TmuxMonitorConfig:
@@ -179,6 +184,81 @@ def cmd_web(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_resume_snapshot(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    manifest = read_resume_manifest(config)
+    if manifest is None:
+        print("No resume manifest found. Has the daemon ever run a heartbeat?", file=sys.stderr)
+        return 1
+    
+    if getattr(args, "generate_script", False):
+        script = generate_resume_script(manifest)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        out_path = Path.cwd() / f"tmux-resume-{timestamp}.sh"
+        out_path.write_text(script + "\n", encoding="utf-8")
+        out_path.chmod(0o755)
+        print(f"Resume script written to: {out_path}")
+        print("Review it before running. It recreates sessions but does NOT start agents.")
+        return 0
+    
+    text = format_snapshot_text(manifest)
+    print(text)
+    return 0
+
+
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    days = getattr(args, "days", 2)
+    dry_run = not getattr(args, "approve", False)
+    
+    current = discover_all()
+    classifications: dict[str, Any] = {}
+    for sess_name, panes in current.items():
+        for pane in panes:
+            content = capture_pane(pane.pane_id, lines=200)
+            cls = classify_pane(
+                content, pane.tty,
+                current_command=pane.current_command,
+                pane_title=pane.title,
+            )
+            classifications[pane.pane_id] = cls
+    
+    # Load summaries from status file
+    summaries: dict[str, dict[str, Any]] = {}
+    data = _load_status(config)
+    if data:
+        for sess_data in data.get("sessions", {}).values():
+            for qid, pd in sess_data.get("panes", {}).items():
+                if "summary" in pd or "current_task" in pd:
+                    summaries[qid] = {
+                        "summary": pd.get("summary", ""),
+                        "current_task": pd.get("current_task", ""),
+                    }
+    
+    stale = find_stale_panes(
+        current, classifications, config.panes_dir, days=days, summaries=summaries
+    )
+    
+    if not stale:
+        print(f"No stale panes found (threshold: {days} days).")
+        return 0
+    
+    report = format_stale_report(stale, dry_run=dry_run)
+    print(report)
+    
+    if not dry_run:
+        results = kill_panes(stale)
+        print(f"Killed {len(results['killed'])} panes.")
+        if results["failed"]:
+            print(f"Failed to kill {len(results['failed'])} panes:")
+            for item in results["failed"]:
+                print(f"  {item['pane']}: {item['error']}")
+    else:
+        print(f"Run with --approve to kill these {len(stale)} panes.")
+    
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="tmux-monitor", description="tmux session monitoring daemon")
     p.add_argument("--state-dir", help="Override state directory")
@@ -214,6 +294,15 @@ def main(argv: list[str] | None = None) -> int:
     web = sub.add_parser("web", help="Launch Streamlit web dashboard")
     web.add_argument("--port", type=int, default=8501, help="Port (default: 8501)")
     web.set_defaults(func=cmd_web)
+
+    resume = sub.add_parser("resume-snapshot", help="Show last-known agent pane state for recovery")
+    resume.add_argument("--generate-script", action="store_true", help="Generate a shell script to recreate tmux sessions")
+    resume.set_defaults(func=cmd_resume_snapshot)
+
+    cleanup = sub.add_parser("cleanup", help="Detect and optionally kill stale agent panes")
+    cleanup.add_argument("--days", type=int, default=2, help="Idle threshold in days (default: 2)")
+    cleanup.add_argument("--approve", action="store_true", help="Actually kill stale panes (default: dry-run)")
+    cleanup.set_defaults(func=cmd_cleanup)
 
     args = p.parse_args(argv)
     return int(args.func(args))
