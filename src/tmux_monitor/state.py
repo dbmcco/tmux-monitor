@@ -9,6 +9,7 @@ from typing import Any
 from tmux_monitor.config import TmuxMonitorConfig
 from tmux_monitor.detection import PaneClassification
 from tmux_monitor.discovery import PaneInfo
+from tmux_monitor.resume import build_resume_manifest, write_resume_manifest as _write_resume_manifest_impl
 
 
 def _iso_now() -> str:
@@ -119,3 +120,18 @@ def save_known_sessions(config: TmuxMonitorConfig, data: dict[str, Any]) -> None
     tmp = config.known_sessions_path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     tmp.replace(config.known_sessions_path)
+
+
+def write_resume_manifest(
+    config: TmuxMonitorConfig,
+    sessions: dict[str, list[PaneInfo]],
+    classifications: dict[str, PaneClassification],
+    summaries: dict[str, dict[str, Any]],
+    active_since: dict[str, str],
+    session_created_at: dict[str, str],
+) -> None:
+    """Build and persist the resume manifest from current state."""
+    manifest = build_resume_manifest(
+        sessions, classifications, summaries, active_since, session_created_at
+    )
+    _write_resume_manifest_impl(config, manifest)

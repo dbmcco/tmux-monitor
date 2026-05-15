@@ -24,6 +24,7 @@ from tmux_monitor.state import (
     load_known_sessions,
     prune_old_daily,
     save_known_sessions,
+    write_resume_manifest,
     write_status,
 )
 from tmux_monitor.summarizer import run_summarization_cycle
@@ -169,6 +170,14 @@ def run_heartbeat(config: TmuxMonitorConfig) -> dict[str, Any]:
     save_known_sessions(config, new_known)
 
     write_status(
+        config, current,
+        {pid: cls for pid, cls in classifications.items()},
+        summaries,
+        active_since,
+        session_created_at=session_created_at,
+    )
+
+    write_resume_manifest(
         config, current,
         {pid: cls for pid, cls in classifications.items()},
         summaries,
