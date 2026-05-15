@@ -2,7 +2,7 @@
 
 A heartbeat daemon that watches all tmux panes across all sessions, detects which coding agents are running (Claude Code, Codex, OpenCode, Kilocode, pi.dev), captures their output, generates AI-powered summaries of what each agent is doing, and exposes file-based state for other agents to consume.
 
-Built for the speedrift ecosystem — coding agents and paia-agents use this to coordinate, avoid conflicts, and understand what work is happening across tmux.
+Built for the [speedrift ecosystem](https://github.com/dbmcco/speedrift-ecosystem) — coding agents and paia-agents use this to coordinate, avoid conflicts, and understand what work is happening across tmux.
 
 ## What It Does
 
@@ -29,7 +29,7 @@ tmux sessions
 │  3. Detach from gone panes                   │
 │  4. Trim pane logs (512KB max)               │
 │  5. Classify each pane (process + title)     │
-│  6. Summarize agent panes (Ollama hermes3)   │
+│  6. Summarize agent panes (Ollama dolphin3)   │
 │  7. Write status.json + daily events         │
 │  8. Prune old daily logs                     │
 └──────────┬───────────────────────────────────┘
@@ -47,7 +47,7 @@ tmux sessions
 pip install -e .
 ```
 
-Requires: Python 3.11+, tmux, [Ollama](https://ollama.ai) with `hermes3:8b` loaded.
+Requires: Python 3.11+, tmux, [Ollama](https://ollama.ai) with `dolphin3:8b` loaded (default; any model works).
 
 ## Usage
 
@@ -76,7 +76,7 @@ tmux-monitor sessions
 # View a pane's captured log
 tmux-monitor logs "fresh_7.1"
 
-# Web dashboard (Streamlit)
+# Web dashboard (Streamlit) — http://100.77.214.44:8901 on Tailscale
 tmux-monitor web --port 8901
 
 # Stop daemon
@@ -137,7 +137,7 @@ The daemon uses three signals to classify each pane:
 
 ## How Summarization Works
 
-For each agent-type pane with captured output, the daemon calls Ollama (`hermes3:8b` by default, already loaded in VRAM) every heartbeat cycle with:
+For each agent-type pane with captured output, the daemon calls Ollama (`dolphin3:8b` by default, configurable) every 5 minutes with:
 
 - The last 15KB of pane output
 - The previous summary (for continuity)
@@ -255,7 +255,7 @@ Event types: `session.appeared`, `session.disappeared`, `pane.created`, `pane.de
 | `heartbeat_night_seconds` | 3600 | Heartbeat interval 10pm–4am |
 | `night_start_hour` | 22 | Night mode starts at 10pm |
 | `night_end_hour` | 4 | Night mode ends at 4am |
-| `llm_summary_interval_seconds` | 300 | How often to summarize (not yet interval-gated) |
+| `llm_summary_interval_seconds` | 300 | How often to summarize (throttled to avoid blocking heartbeats) |
 | `max_pane_log_bytes` | 524288 | Max pane log before trim (512KB) |
 | `state_dir` | `~/.local/share/driftdriver/tmux-monitor` | Where all state lives |
 
@@ -319,6 +319,16 @@ src/tmux_monitor/
 ├── summarizer.py   # Ollama API calls for pane summarization
 └── web.py          # Streamlit dashboard (single table view)
 ```
+
+## Ecosystem
+
+This repo is part of the [speedrift ecosystem](https://github.com/dbmcco/speedrift-ecosystem):
+
+- **speedrift-ecosystem** — the coordination layer that connects coding agents, workgraphs, and daemons
+- **paia-agent-runtime** — where the `tmux_monitor` tool is registered for paia-agents
+- **driftdriver** — drift-checking daemon that uses tmux-monitor state for repo health snapshots
+
+Web dashboard: `http://100.77.214.44:8901` (Tailscale-accessible)
 
 ## License
 
