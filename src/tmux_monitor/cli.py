@@ -16,7 +16,7 @@ from tmux_monitor.relevance import (
 )
 from tmux_monitor.resume import read_resume_manifest, format_snapshot_text, generate_resume_script
 from tmux_monitor.hygiene import find_stale_panes, format_stale_report, kill_panes
-from tmux_monitor.discovery import discover_all
+from tmux_monitor.discovery import discover_all, capture_pane
 from tmux_monitor.detection import classify_pane
 
 

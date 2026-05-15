@@ -83,6 +83,40 @@ tmux-monitor web --port 8901
 tmux-monitor stop
 ```
 
+### Resume & Recovery
+
+After tmux server dies or machine reboots, recover context:
+
+```bash
+tmux-monitor resume-snapshot              # Show last-known agent state
+tmux-monitor resume-snapshot --generate-script  # Create tmux layout script
+```
+
+The monitor persists a `resume-manifest.json` after every heartbeat. It captures:
+- Session names, window counts, pane IDs
+- Agent type (codex, opencode, claude)
+- Working directory and last task summary
+- Best-effort resume command for each agent
+
+**Important:** The generated script recreates tmux sessions and cds into the right directories, but does NOT auto-start agents. You review and run it manually, then decide whether to resume each agent with its CLI's native `--resume` flag.
+
+### Hygiene (Stale Pane Cleanup)
+
+Over time, abandoned agent panes accumulate. The monitor can detect and flag them:
+
+```bash
+tmux-monitor cleanup                      # Dry-run: show stale panes
+tmux-monitor cleanup --approve            # Actually kill stale panes
+tmux-monitor cleanup --days 1             # Flag panes idle > 1 day
+```
+
+A pane is "stale" when ALL of these are true:
+- It was classified as an agent pane (not shell/idle)
+- Its pipe-pane log has had no writes for N days
+- Its `current_command` no longer matches a known agent command
+
+**Always review before `--approve`.** The monitor recommends; you decide.
+
 ## How Detection Works
 
 The daemon uses three signals to classify each pane:
