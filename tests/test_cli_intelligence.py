@@ -6,9 +6,9 @@ from tmux_monitor.cli import main
 from tmux_monitor.config import TmuxMonitorConfig
 
 
-def test_resume_snapshot_no_manifest(capsys):
+def test_resume_snapshot_no_manifest(tmp_path, capsys):
     """resume-snapshot without manifest prints error."""
-    with patch("sys.argv", ["tmux-monitor", "resume-snapshot"]):
+    with patch("sys.argv", ["tmux-monitor", "--state-dir", str(tmp_path), "resume-snapshot"]):
         rc = main()
     assert rc == 1
     captured = capsys.readouterr()

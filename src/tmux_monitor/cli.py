@@ -18,6 +18,7 @@ from tmux_monitor.resume import read_resume_manifest, format_snapshot_text, gene
 from tmux_monitor.hygiene import find_stale_panes, format_stale_report, kill_panes
 from tmux_monitor.discovery import discover_all, capture_pane
 from tmux_monitor.detection import classify_pane
+from tmux_monitor.launchd import install_launch_agent, launch_agent_status, uninstall_launch_agent
 
 
 def _load_config(args: argparse.Namespace) -> TmuxMonitorConfig:
@@ -259,6 +260,41 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_launchd_install(args: argparse.Namespace) -> int:
+    state_dir = Path(args.state_dir).expanduser() if getattr(args, "state_dir", None) else None
+    plist_path = Path(args.plist_path).expanduser() if getattr(args, "plist_path", None) else None
+    path = install_launch_agent(
+        python_executable=getattr(args, "python", None),
+        state_dir=state_dir,
+        plist_path=plist_path,
+        load=not getattr(args, "no_load", False),
+    )
+    if getattr(args, "no_load", False):
+        print(f"LaunchAgent plist written to: {path}")
+    else:
+        print(f"LaunchAgent installed and started: {path}")
+    return 0
+
+
+def cmd_launchd_uninstall(args: argparse.Namespace) -> int:
+    plist_path = Path(args.plist_path).expanduser() if getattr(args, "plist_path", None) else None
+    path = uninstall_launch_agent(
+        plist_path=plist_path,
+        unload=not getattr(args, "no_unload", False),
+    )
+    print(f"LaunchAgent removed: {path}")
+    return 0
+
+
+def cmd_launchd_status(args: argparse.Namespace) -> int:
+    result = launch_agent_status()
+    stream = sys.stdout if result.returncode == 0 else sys.stderr
+    output = result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
+    if output:
+        print(output, file=stream)
+    return result.returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="tmux-monitor", description="tmux session monitoring daemon")
     p.add_argument("--state-dir", help="Override state directory")
@@ -303,6 +339,23 @@ def main(argv: list[str] | None = None) -> int:
     cleanup.add_argument("--days", type=int, default=2, help="Idle threshold in days (default: 2)")
     cleanup.add_argument("--approve", action="store_true", help="Actually kill stale panes (default: dry-run)")
     cleanup.set_defaults(func=cmd_cleanup)
+
+    launchd = sub.add_parser("launchd", help="Install or inspect the macOS LaunchAgent")
+    launchd_sub = launchd.add_subparsers(dest="launchd_action", required=True)
+
+    launchd_install = launchd_sub.add_parser("install", help="Install and start the LaunchAgent")
+    launchd_install.add_argument("--python", help="Python executable for launchd (default: current interpreter)")
+    launchd_install.add_argument("--plist-path", help="Override plist output path")
+    launchd_install.add_argument("--no-load", action="store_true", help="Write plist without loading it")
+    launchd_install.set_defaults(func=cmd_launchd_install)
+
+    launchd_uninstall = launchd_sub.add_parser("uninstall", help="Unload and remove the LaunchAgent")
+    launchd_uninstall.add_argument("--plist-path", help="Override plist path")
+    launchd_uninstall.add_argument("--no-unload", action="store_true", help="Remove plist without calling launchctl")
+    launchd_uninstall.set_defaults(func=cmd_launchd_uninstall)
+
+    launchd_status_parser = launchd_sub.add_parser("status", help="Print launchd status for the LaunchAgent")
+    launchd_status_parser.set_defaults(func=cmd_launchd_status)
 
     args = p.parse_args(argv)
     return int(args.func(args))

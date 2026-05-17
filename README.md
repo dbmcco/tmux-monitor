@@ -264,17 +264,17 @@ Event types: `session.appeared`, `session.disappeared`, `pane.created`, `pane.de
 A launchd plist keeps the daemon running across reboots and crashes:
 
 ```bash
-# Load
-launchctl load ~/Library/LaunchAgents/com.braydon.driftdriver-tmux-monitor.plist
+# Install and start
+tmux-monitor launchd install
 
 # Check
-launchctl list | grep tmux-monitor
+tmux-monitor launchd status
 
 # Stop
-launchctl unload ~/Library/LaunchAgents/com.braydon.driftdriver-tmux-monitor.plist
+tmux-monitor launchd uninstall
 
 # Logs
-tail -f ~/.local/log/driftdriver-tmux-monitor.log
+tail -f ~/.local/log/tmux-monitor.err.log
 ```
 
 The plist uses `KeepAlive: true` and `RunAtLoad: true` — it restarts automatically on crash and starts at login.
