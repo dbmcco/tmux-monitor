@@ -83,6 +83,11 @@ tmux-monitor web --port 8901
 tmux-monitor stop
 ```
 
+The web dashboard includes pane filters for `agents only` or `all`, plus an
+activity control for `active first`, `all activity`, `active only`, and
+`idle only`. Activity is based on recent pane output when available and falls
+back to visible tmux title busy indicators for older status files.
+
 ### Resume & Recovery
 
 After tmux server dies or machine reboots, recover context:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,14 @@ def _iso_now() -> str:
 
 def _today_str() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d")
+
+
+def _log_mtime_iso(path: Path) -> str:
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return ""
+    return datetime.datetime.fromtimestamp(mtime, datetime.timezone.utc).isoformat()
 
 
 def write_status(
@@ -56,6 +65,7 @@ def write_status(
                 "cwd": pane.cwd,
                 "title": pane.title,
                 "current_command": pane.current_command,
+                "last_output_at": _log_mtime_iso(config.panes_dir / pane.log_filename),
             }
             if qid in active_since:
                 entry["active_since"] = active_since[qid]

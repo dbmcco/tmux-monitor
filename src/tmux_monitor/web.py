@@ -1,10 +1,11 @@
 # ABOUTME: Streamlit web frontend for tmux-monitor — single table dashboard.
 import json
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 import streamlit as st
+
+from tmux_monitor.web_model import build_dashboard_rows, filter_dashboard_rows, format_duration
 
 _STATE_DIR = Path.home() / ".local" / "share" / "driftdriver" / "tmux-monitor"
 
@@ -19,22 +20,6 @@ def _load_status() -> dict | None:
         return None
 
 
-def _duration(iso_str: str | None) -> str:
-    if not iso_str:
-        return "-"
-    try:
-        ts = datetime.fromisoformat(iso_str)
-        secs = int((datetime.now(timezone.utc) - ts).total_seconds())
-        h, m, s = secs // 3600, (secs % 3600) // 60, secs % 60
-        if h:
-            return f"{h}h{m:02d}m"
-        if m:
-            return f"{m}m{s:02d}s"
-        return f"{s}s"
-    except (ValueError, TypeError):
-        return "-"
-
-
 st.set_page_config(page_title="tmux monitor", page_icon=":satellite:", layout="wide")
 
 status = _load_status()
@@ -43,42 +28,29 @@ if status is None:
     st.stop()
 
 sessions = status.get("sessions", {})
+rows = build_dashboard_rows(status)
 
-rows = []
-for sess_name, sess_data in sessions.items():
-    sess_created = sess_data.get("created_at", "")
-    for pane_key, pd in sess_data.get("panes", {}).items():
-        rows.append({
-            "session": sess_name,
-            "pane": pane_key,
-            "pane_id": pd.get("pane_id", ""),
-            "type": pd.get("type", "?"),
-            "title": pd.get("title", ""),
-            "tmux_session": _duration(sess_created),
-            "agent_duration": _duration(pd.get("active_since")),
-            "cwd": pd.get("cwd", "").replace(str(Path.home()), "~"),
-            "task": pd.get("current_task", ""),
-            "summary": pd.get("summary", ""),
-        })
-
-col1, col2, col3, col4 = st.columns(4)
-agent_count = sum(1 for r in rows if r["type"] not in ("shell", "idle", "unknown"))
+col1, col2, col3, col4, col5 = st.columns(5)
+agent_count = sum(1 for r in rows if r["is_agent"])
 with col1:
     st.metric("Sessions", len(sessions))
 with col2:
     st.metric("Total Panes", len(rows))
 with col3:
-    st.metric("Active Agents", agent_count)
+    st.metric("Agent Panes", agent_count)
 with col4:
+    st.metric("Active Agents", sum(1 for r in rows if r["is_agent"] and r["activity"] == "active"))
+with col5:
     ts = status.get("timestamp", "")
-    st.metric("Updated", _duration(ts) if ts else "never")
+    st.metric("Updated", format_duration(ts) if ts else "never")
 
-show_filter = st.selectbox("Show", ["agents only", "all"], index=0)
+show_filter, activity_filter = st.columns(2)
+with show_filter:
+    pane_filter = st.selectbox("Show", ["agents only", "all"], index=0)
+with activity_filter:
+    activity = st.selectbox("Activity", ["active first", "all activity", "active only", "idle only"], index=0)
 
-if show_filter == "agents only":
-    display = [r for r in rows if r["type"] not in ("shell", "idle", "unknown")]
-else:
-    display = rows
+display = filter_dashboard_rows(rows, pane_filter, activity)
 
 if not display:
     st.info("No panes match the filter.")
@@ -91,8 +63,11 @@ for r in display:
         "Pane": r["pane"].split(":")[-1] if ":" in r["pane"] else r["pane"],
         "Title": r["title"],
         "Type": r["type"],
+        "Activity": r["activity"],
+        "Activity Signal": r["activity_reason"],
         "tmux up": r["tmux_session"],
         "agent up": r["agent_duration"],
+        "last output": r["last_output"],
         "CWD": r["cwd"].split("/")[-1] if r["cwd"] else "",
         "Current Task": r["task"],
         "Summary": r["summary"][:200] + ("..." if len(r["summary"]) > 200 else ""),
@@ -108,8 +83,11 @@ st.dataframe(
         "Pane": st.column_config.TextColumn(width="small"),
         "Title": st.column_config.TextColumn(width="large"),
         "Type": st.column_config.TextColumn(width="small"),
+        "Activity": st.column_config.TextColumn(width="small"),
+        "Activity Signal": st.column_config.TextColumn(width="small"),
         "tmux up": st.column_config.TextColumn(width="small"),
         "agent up": st.column_config.TextColumn(width="small"),
+        "last output": st.column_config.TextColumn(width="small"),
         "CWD": st.column_config.TextColumn(width="small"),
         "Current Task": st.column_config.TextColumn(width="medium"),
         "Summary": st.column_config.TextColumn(width="large"),
