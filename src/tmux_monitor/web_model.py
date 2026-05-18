@@ -40,6 +40,15 @@ def _parse_iso(iso_str: str | None) -> datetime | None:
     return ts.astimezone(timezone.utc)
 
 
+def _window_index_from_pane_key(pane_key: str) -> int | None:
+    try:
+        _, pane_ref = pane_key.rsplit(":", 1)
+        window_ref, _ = pane_ref.split(".", 1)
+        return int(window_ref)
+    except (ValueError, TypeError):
+        return None
+
+
 def _activity_for_pane(
     pane_data: dict[str, Any],
     *,
@@ -82,15 +91,22 @@ def build_dashboard_rows(
                 active_window_seconds=active_window_seconds,
             )
             cwd = pane_data.get("cwd", "").replace(str(Path.home()), "~")
+            window_index = pane_data.get("window")
+            if window_index is None:
+                window_index = _window_index_from_pane_key(pane_key)
             rows.append({
                 "session": sess_name,
                 "pane": pane_key,
                 "pane_id": pane_data.get("pane_id", ""),
+                "window": window_index,
+                "window_name": pane_data.get("window_name", ""),
+                "window_active": bool(pane_data.get("window_active", False)),
                 "type": pane_data.get("type", "?"),
                 "title": pane_data.get("title", ""),
                 "tmux_session": format_duration(sess_created, current),
                 "agent_duration": format_duration(pane_data.get("active_since"), current),
                 "last_output": format_duration(pane_data.get("last_output_at"), current),
+                "cwd_full": pane_data.get("cwd", ""),
                 "cwd": cwd,
                 "task": pane_data.get("current_task", ""),
                 "summary": pane_data.get("summary", ""),

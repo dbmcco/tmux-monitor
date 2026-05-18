@@ -65,6 +65,9 @@ def write_status(
                 "cwd": pane.cwd,
                 "title": pane.title,
                 "current_command": pane.current_command,
+                "window": pane.window,
+                "window_name": pane.window_name,
+                "window_active": pane.window_active,
                 "last_output_at": _log_mtime_iso(config.panes_dir / pane.log_filename),
             }
             if qid in active_since:

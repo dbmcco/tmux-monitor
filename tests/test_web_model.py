@@ -65,3 +65,25 @@ def test_activity_falls_back_to_busy_title_for_existing_status_files():
 
     assert rows[0]["activity"] == "active"
     assert rows[0]["activity_reason"] == "busy title"
+
+
+def test_dashboard_rows_parse_window_index_from_legacy_pane_key():
+    status = {
+        "sessions": {
+            "work": {
+                "created_at": "2026-05-18T11:00:00+00:00",
+                "panes": {
+                    "work:7.1": {
+                        "type": "codex",
+                        "pane_id": "%1",
+                        "title": "repo",
+                        "cwd": "/tmp/repo",
+                    }
+                },
+            }
+        }
+    }
+
+    rows = build_dashboard_rows(status)
+
+    assert rows[0]["window"] == 7

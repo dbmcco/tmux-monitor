@@ -20,6 +20,8 @@ def test_write_status_includes_last_output_timestamp(tmp_path):
         cwd="/tmp/repo",
         title="repo",
         current_command="codex",
+        window_name="repo work",
+        window_active=True,
     )
     log_path = config.panes_dir / pane.log_filename
     log_path.write_text("working\n", encoding="utf-8")
@@ -38,3 +40,6 @@ def test_write_status_includes_last_output_timestamp(tmp_path):
 
     assert entry["last_output_at"]
     assert entry["last_output_at"].endswith("+00:00")
+    assert entry["window"] == 1
+    assert entry["window_name"] == "repo work"
+    assert entry["window_active"] is True

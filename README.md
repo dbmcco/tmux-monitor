@@ -88,6 +88,11 @@ activity control for `active first`, `all activity`, `active only`, and
 `idle only`. Activity is based on recent pane output when available and falls
 back to visible tmux title busy indicators for older status files.
 
+Selecting a row in the dashboard opens contextual actions for that tmux window:
+start Codex in a new window using the selected row's directory, or kill the
+selected tmux window after checking an explicit confirmation box. A separate
+create section can create new tmux windows or sessions.
+
 ### Resume & Recovery
 
 After tmux server dies or machine reboots, recover context:
