@@ -1,6 +1,8 @@
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+from types import SimpleNamespace
 
 from tmux_monitor.cli import main
 from tmux_monitor.config import TmuxMonitorConfig
@@ -105,3 +107,29 @@ def test_cleanup_no_stale_panes(capsys):
     assert rc == 0
     captured = capsys.readouterr()
     assert "No stale panes found" in captured.out
+
+
+def test_web_cli_uses_streamlit_without_importing_web_module(tmp_path):
+    """web command locates web.py without executing Streamlit app imports."""
+    web_path = tmp_path / "web.py"
+    web_path.write_text("# test app\n", encoding="utf-8")
+    spec = SimpleNamespace(origin=str(web_path))
+
+    with patch("tmux_monitor.cli.importlib.util.find_spec", return_value=spec) as find_spec, \
+         patch("tmux_monitor.cli.subprocess.run", return_value=subprocess.CompletedProcess([], 0)) as run, \
+         patch("sys.argv", ["tmux-monitor", "web", "--port", "8901"]):
+        rc = main()
+
+    assert rc == 0
+    find_spec.assert_called_once_with("tmux_monitor.web")
+    assert run.call_args.args[0] == [
+        "streamlit",
+        "run",
+        str(web_path),
+        "--server.port",
+        "8901",
+        "--server.headless",
+        "true",
+        "--server.address",
+        "0.0.0.0",
+    ]

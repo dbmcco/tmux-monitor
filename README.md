@@ -264,17 +264,23 @@ Event types: `session.appeared`, `session.disappeared`, `pane.created`, `pane.de
 A launchd plist keeps the daemon running across reboots and crashes:
 
 ```bash
-# Install and start
+# Install and start the monitor
 tmux-monitor launchd install
+
+# Install and start the web UI on port 8901
+tmux-monitor launchd install --service web --port 8901
 
 # Check
 tmux-monitor launchd status
+tmux-monitor launchd status --service web
 
 # Stop
 tmux-monitor launchd uninstall
+tmux-monitor launchd uninstall --service web
 
 # Logs
 tail -f ~/.local/log/tmux-monitor.err.log
+tail -f ~/.local/log/tmux-monitor-web.err.log
 ```
 
 The plist uses `KeepAlive: true` and `RunAtLoad: true` — it restarts automatically on crash and starts at login.

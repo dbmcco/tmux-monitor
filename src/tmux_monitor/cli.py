@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import importlib.util
 import json
 import subprocess
 import sys
@@ -174,13 +175,17 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 
 def cmd_web(args: argparse.Namespace) -> int:
-    import tmux_monitor.web as web_module
-    web_path = Path(web_module.__file__)
+    spec = importlib.util.find_spec("tmux_monitor.web")
+    if spec is None or spec.origin is None:
+        print("Could not find tmux_monitor.web.", file=sys.stderr)
+        return 1
+    web_path = Path(spec.origin)
     port = getattr(args, "port", 8501)
     subprocess.run(
-        [sys.executable, "-m", "streamlit", "run", str(web_path),
+        ["streamlit", "run", str(web_path),
          "--server.port", str(port),
-         "--server.headless", "true"],
+         "--server.headless", "true",
+         "--server.address", "0.0.0.0"],
     )
     return 0
 
@@ -264,9 +269,11 @@ def cmd_launchd_install(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir).expanduser() if getattr(args, "state_dir", None) else None
     plist_path = Path(args.plist_path).expanduser() if getattr(args, "plist_path", None) else None
     path = install_launch_agent(
+        service=getattr(args, "service", "monitor"),
         python_executable=getattr(args, "python", None),
         state_dir=state_dir,
         plist_path=plist_path,
+        port=getattr(args, "port", 8901),
         load=not getattr(args, "no_load", False),
     )
     if getattr(args, "no_load", False):
@@ -279,6 +286,7 @@ def cmd_launchd_install(args: argparse.Namespace) -> int:
 def cmd_launchd_uninstall(args: argparse.Namespace) -> int:
     plist_path = Path(args.plist_path).expanduser() if getattr(args, "plist_path", None) else None
     path = uninstall_launch_agent(
+        service=getattr(args, "service", "monitor"),
         plist_path=plist_path,
         unload=not getattr(args, "no_unload", False),
     )
@@ -287,7 +295,7 @@ def cmd_launchd_uninstall(args: argparse.Namespace) -> int:
 
 
 def cmd_launchd_status(args: argparse.Namespace) -> int:
-    result = launch_agent_status()
+    result = launch_agent_status(getattr(args, "service", "monitor"))
     stream = sys.stdout if result.returncode == 0 else sys.stderr
     output = result.stdout.strip() if result.returncode == 0 else result.stderr.strip()
     if output:
@@ -344,17 +352,21 @@ def main(argv: list[str] | None = None) -> int:
     launchd_sub = launchd.add_subparsers(dest="launchd_action", required=True)
 
     launchd_install = launchd_sub.add_parser("install", help="Install and start the LaunchAgent")
+    launchd_install.add_argument("--service", choices=["monitor", "web"], default="monitor", help="LaunchAgent to install")
     launchd_install.add_argument("--python", help="Python executable for launchd (default: current interpreter)")
     launchd_install.add_argument("--plist-path", help="Override plist output path")
+    launchd_install.add_argument("--port", type=int, default=8901, help="Web UI port when --service web (default: 8901)")
     launchd_install.add_argument("--no-load", action="store_true", help="Write plist without loading it")
     launchd_install.set_defaults(func=cmd_launchd_install)
 
     launchd_uninstall = launchd_sub.add_parser("uninstall", help="Unload and remove the LaunchAgent")
+    launchd_uninstall.add_argument("--service", choices=["monitor", "web"], default="monitor", help="LaunchAgent to remove")
     launchd_uninstall.add_argument("--plist-path", help="Override plist path")
     launchd_uninstall.add_argument("--no-unload", action="store_true", help="Remove plist without calling launchctl")
     launchd_uninstall.set_defaults(func=cmd_launchd_uninstall)
 
     launchd_status_parser = launchd_sub.add_parser("status", help="Print launchd status for the LaunchAgent")
+    launchd_status_parser.add_argument("--service", choices=["monitor", "web"], default="monitor", help="LaunchAgent to inspect")
     launchd_status_parser.set_defaults(func=cmd_launchd_status)
 
     args = p.parse_args(argv)
