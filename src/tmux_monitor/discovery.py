@@ -45,7 +45,7 @@ def list_sessions() -> list[str]:
 
 def list_panes(session: str) -> list[PaneInfo]:
     fmt = "#{pane_id}:#{session_name}:#{window_index}:#{pane_index}:#{pane_tty}:#{pane_current_path}:#{pane_title}:#{pane_current_command}"
-    out = _tmux_out("list-panes", "-t", session, "-F", fmt)
+    out = _tmux_out("list-panes", "-s", "-t", session, "-F", fmt)
     if not out:
         return []
     panes = []
