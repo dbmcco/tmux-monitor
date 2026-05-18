@@ -49,6 +49,21 @@ def _window_index_from_pane_key(pane_key: str) -> int | None:
         return None
 
 
+def _row_key(session: str, window_index: int | None, pane_key: str) -> str:
+    if window_index is not None:
+        return f"{session}:{window_index}"
+    return pane_key
+
+
+def find_row_by_key(rows: list[dict[str, Any]], row_key: str | None) -> dict[str, Any] | None:
+    if not row_key:
+        return None
+    for row in rows:
+        if row.get("row_key") == row_key:
+            return row
+    return None
+
+
 def _activity_for_pane(
     pane_data: dict[str, Any],
     *,
@@ -95,6 +110,7 @@ def build_dashboard_rows(
             if window_index is None:
                 window_index = _window_index_from_pane_key(pane_key)
             rows.append({
+                "row_key": _row_key(sess_name, window_index, pane_key),
                 "session": sess_name,
                 "pane": pane_key,
                 "pane_id": pane_data.get("pane_id", ""),

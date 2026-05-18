@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from tmux_monitor.web_model import build_dashboard_rows, filter_dashboard_rows
+from tmux_monitor.web_model import build_dashboard_rows, filter_dashboard_rows, find_row_by_key
 
 
 def test_activity_filter_and_sort_uses_recent_output():
@@ -87,3 +87,28 @@ def test_dashboard_rows_parse_window_index_from_legacy_pane_key():
     rows = build_dashboard_rows(status)
 
     assert rows[0]["window"] == 7
+
+
+def test_dashboard_rows_have_stable_keys_for_persisted_selection():
+    status = {
+        "sessions": {
+            "work": {
+                "created_at": "2026-05-18T11:00:00+00:00",
+                "panes": {
+                    "work:7.1": {
+                        "type": "codex",
+                        "pane_id": "%1",
+                        "window": 7,
+                        "window_name": "repo",
+                        "title": "repo",
+                        "cwd": "/tmp/repo",
+                    }
+                },
+            }
+        }
+    }
+
+    rows = build_dashboard_rows(status)
+
+    assert rows[0]["row_key"] == "work:7"
+    assert find_row_by_key(rows, "work:7") == rows[0]

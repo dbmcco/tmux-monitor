@@ -6,7 +6,12 @@ from pathlib import Path
 import streamlit as st
 
 from tmux_monitor.actions import kill_window, new_session, new_window, start_codex_window
-from tmux_monitor.web_model import build_dashboard_rows, filter_dashboard_rows, format_duration
+from tmux_monitor.web_model import (
+    build_dashboard_rows,
+    filter_dashboard_rows,
+    find_row_by_key,
+    format_duration,
+)
 
 _STATE_DIR = Path.home() / ".local" / "share" / "driftdriver" / "tmux-monitor"
 
@@ -33,6 +38,15 @@ def _selected_rows(event: object) -> list[int]:
     if rows is None and isinstance(selection, dict):
         rows = selection.get("rows", [])
     return list(rows or [])
+
+
+def _selected_row_key(display: list[dict], indexes: list[int]) -> str | None:
+    if not indexes:
+        return None
+    idx = indexes[0]
+    if idx < 0 or idx >= len(display):
+        return None
+    return display[idx].get("row_key")
 
 
 st.set_page_config(page_title="tmux monitor", page_icon=":satellite:", layout="wide")
@@ -103,8 +117,13 @@ if not display:
     st.stop()
 
 table_data = []
+selected_key = st.session_state.get("selected_window_key")
+selected_display_index = None
 for r in display:
+    if r.get("row_key") == selected_key:
+        selected_display_index = len(table_data)
     table_data.append({
+        "Selected": "*" if r.get("row_key") == selected_key else "",
         "Session": r["session"],
         "Window": r["window_name"] or r["title"],
         "Window #": r["window"] if r["window"] is not None else "",
@@ -126,9 +145,16 @@ event = st.dataframe(
     table_data,
     width="stretch",
     hide_index=True,
+    key="monitor_table",
     on_select="rerun",
     selection_mode="single-row",
+    selection_default=(
+        {"selection": {"rows": [selected_display_index]}}
+        if selected_display_index is not None
+        else None
+    ),
     column_config={
+        "Selected": st.column_config.TextColumn(width="small"),
         "Session": st.column_config.TextColumn(width="medium"),
         "Window": st.column_config.TextColumn(width="medium"),
         "Window #": st.column_config.TextColumn(width="small"),
@@ -148,8 +174,12 @@ event = st.dataframe(
 )
 
 selected_indexes = _selected_rows(event)
-if selected_indexes:
-    selected = display[selected_indexes[0]]
+clicked_key = _selected_row_key(display, selected_indexes)
+if clicked_key:
+    st.session_state["selected_window_key"] = clicked_key
+
+selected = find_row_by_key(rows, st.session_state.get("selected_window_key"))
+if selected is not None:
     st.divider()
     st.subheader("Selected window")
     st.caption(
@@ -179,10 +209,14 @@ if selected_indexes:
         if st.button("Kill window", disabled=not can_kill):
             result = kill_window(selected["session"], int(selected["window"]))
             if result.ok:
+                st.session_state.pop("selected_window_key", None)
                 st.success("Killed tmux window.")
                 st.rerun()
             else:
                 st.error(result.message)
+    if st.button("Clear selection"):
+        st.session_state.pop("selected_window_key", None)
+        st.rerun()
 
 # Auto-refresh inline — no sidebar
 auto = st.checkbox("Auto-refresh (5s)", value=True)
