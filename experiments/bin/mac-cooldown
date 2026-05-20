@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# ABOUTME: Pause or inspect local background services that drive fan and battery load.
+# ABOUTME: Intended for short cooldown/charging windows on Braydon's Mac.
+
+set -euo pipefail
+
+UID_NUM="$(id -u)"
+LAUNCH_AGENTS_DIR="/Users/braydon/Library/LaunchAgents"
+
+DEFAULT_PAUSE_LABELS=(
+  homebrew.mxcl.colima
+  com.paia.keepawake
+  com.braydon.caffeinate.ac
+)
+
+AGENT_LABELS=(
+  com.paia.work
+  com.paia.os-backend
+  com.speedrift.ecosystem-hub
+  com.braydon.driftdriver-tmux-monitor
+  com.braydon.driftdriver-tmux-monitor-web
+  com.paia.n8n
+  com.paia.n8n-sidecar
+  com.paia.n8n-tunnel
+  homebrew.mxcl.colima
+)
+
+print_usage() {
+  cat <<'EOF'
+Usage: mac-cooldown <status|pause|pause-agents|pause-ollama|resume-agents>
+
+  status  Show battery, Time Machine, CPU, and active power assertions.
+  pause   Stop Time Machine, Colima, and caffeinate. Keeps PAIA/Speedrift/N8N/Ollama.
+  pause-agents   Also stop PAIA, Speedrift, and N8N services.
+  pause-ollama   Stop active Ollama runners and the Ollama launch agent.
+  resume-agents  Bootstrap PAIA, Speedrift, and N8N services.
+EOF
+}
+
+bootout_label() {
+  local label="$1"
+  launchctl bootout "gui/${UID_NUM}/${label}" >/dev/null 2>&1 || true
+}
+
+bootstrap_label() {
+  local label="$1"
+  local plist="${LAUNCH_AGENTS_DIR}/${label}.plist"
+
+  if [[ ! -f "$plist" ]]; then
+    printf 'skip %s: no plist at %s\n' "$label" "$plist" >&2
+    return
+  fi
+
+  launchctl bootstrap "gui/${UID_NUM}" "$plist" >/dev/null 2>&1 || true
+  launchctl enable "gui/${UID_NUM}/${label}" >/dev/null 2>&1 || true
+  launchctl kickstart -k "gui/${UID_NUM}/${label}" >/dev/null 2>&1 || true
+}
+
+status() {
+  pmset -g batt
+  printf '\n'
+  tmutil status
+  printf '\nTop CPU:\n'
+  ps -arcwwwxo pid,ppid,%cpu,%mem,rss,etime,comm,args | head -25
+  printf '\nPower assertions:\n'
+  pmset -g assertions | sed -n '/Listed by owning process:/,/Kernel Assertions:/p'
+}
+
+pause() {
+  tmutil stopbackup >/dev/null 2>&1 || true
+
+  for label in "${DEFAULT_PAUSE_LABELS[@]}"; do
+    bootout_label "$label"
+  done
+
+  colima stop >/dev/null 2>&1 || true
+
+  pkill -TERM -x caffeinate >/dev/null 2>&1 || true
+
+  sleep 3
+  status
+}
+
+pause_ollama() {
+  bootout_label "homebrew.mxcl.ollama"
+  bootout_label "com.ollama.ollama"
+  pkill -TERM -f 'ollama runner|ollama serve' >/dev/null 2>&1 || true
+
+  sleep 3
+  status
+}
+
+pause_agents() {
+  pause
+
+  for label in "${AGENT_LABELS[@]}"; do
+    bootout_label "$label"
+  done
+
+  pkill -TERM -f 'driftdriver.ecosystem_hub|emit-event|claude --model claude-haiku' >/dev/null 2>&1 || true
+  pkill -TERM -f 'node ./node_modules/.bin/n8n start|paia_n8n|n8n-tunnel' >/dev/null 2>&1 || true
+
+  sleep 3
+  status
+}
+
+resume_agents() {
+  for label in "${AGENT_LABELS[@]}"; do
+    bootstrap_label "$label"
+  done
+
+  status
+}
+
+main() {
+  local command="${1:-}"
+
+  case "$command" in
+    status)
+      status
+      ;;
+    pause)
+      pause
+      ;;
+    pause-agents)
+      pause_agents
+      ;;
+    pause-ollama)
+      pause_ollama
+      ;;
+    resume-agents)
+      resume_agents
+      ;;
+    -h|--help|help|"")
+      print_usage
+      ;;
+    *)
+      print_usage >&2
+      exit 64
+      ;;
+  esac
+}
+
+main "$@"
