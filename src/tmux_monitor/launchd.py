@@ -12,8 +12,9 @@ from typing import Any, Literal
 
 LAUNCHD_LABEL = "com.braydon.driftdriver-tmux-monitor"
 LAUNCHD_WEB_LABEL = "com.braydon.driftdriver-tmux-monitor-web"
+LAUNCHD_RECOVERY_LABEL = "com.braydon.driftdriver-tmux-monitor-recovery"
 DEFAULT_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-LaunchdService = Literal["monitor", "web"]
+LaunchdService = Literal["monitor", "web", "recovery"]
 
 
 def label_for_service(service: LaunchdService = "monitor") -> str:
@@ -21,6 +22,8 @@ def label_for_service(service: LaunchdService = "monitor") -> str:
         return LAUNCHD_LABEL
     if service == "web":
         return LAUNCHD_WEB_LABEL
+    if service == "recovery":
+        return LAUNCHD_RECOVERY_LABEL
     raise ValueError(f"unknown launchd service: {service}")
 
 
@@ -50,6 +53,12 @@ def _program_arguments(
             args.extend(["--state-dir", str(Path(state_dir).expanduser())])
         args.append("start")
         return args
+    if service == "recovery":
+        args = [python_executable or sys.executable, "-m", "tmux_monitor.cli"]
+        if state_dir is not None:
+            args.extend(["--state-dir", str(Path(state_dir).expanduser())])
+        args.extend(["recovery", "boot-check"])
+        return args
     return [
         python_executable or sys.executable,
         "-m",
@@ -75,6 +84,8 @@ def _web_module_path() -> Path:
 def _log_basename(service: LaunchdService) -> str:
     if service == "monitor":
         return "tmux-monitor"
+    if service == "recovery":
+        return "tmux-monitor-recovery"
     return "tmux-monitor-web"
 
 
@@ -92,7 +103,7 @@ def build_plist(
         "Label": label_for_service(service),
         "ProgramArguments": _program_arguments(python_executable, state_dir, service, port),
         "RunAtLoad": True,
-        "KeepAlive": True,
+        "KeepAlive": service != "recovery",
         "ProcessType": "Background",
         "StandardOutPath": str(log_dir / f"{log_basename}.out.log"),
         "StandardErrorPath": str(log_dir / f"{log_basename}.err.log"),

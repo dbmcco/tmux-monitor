@@ -142,9 +142,21 @@ def write_resume_manifest(
     summaries: dict[str, dict[str, Any]],
     active_since: dict[str, str],
     session_created_at: dict[str, str],
+    pane_tails: dict[str, str] | None = None,
 ) -> None:
     """Build and persist the resume manifest from current state."""
+    pane_log_paths: dict[str, Path] = {}
+    for panes in sessions.values():
+        for pane in panes:
+            pane_log_paths[pane.qualified_id] = config.panes_dir / pane.log_filename
+
     manifest = build_resume_manifest(
-        sessions, classifications, summaries, active_since, session_created_at
+        sessions,
+        classifications,
+        summaries,
+        active_since,
+        session_created_at,
+        pane_tails=pane_tails,
+        pane_log_paths=pane_log_paths,
     )
     _write_resume_manifest_impl(config, manifest)

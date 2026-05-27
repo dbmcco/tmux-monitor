@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from tmux_monitor.launchd import (
     LAUNCHD_LABEL,
+    LAUNCHD_RECOVERY_LABEL,
     LAUNCHD_WEB_LABEL,
     build_plist,
     install_launch_agent,
@@ -77,6 +78,27 @@ def test_build_plist_starts_web_ui_at_login(tmp_path):
     ]
     assert plist["StandardOutPath"] == str(tmp_path / ".local" / "log" / "tmux-monitor-web.out.log")
     assert plist["StandardErrorPath"] == str(tmp_path / ".local" / "log" / "tmux-monitor-web.err.log")
+
+
+def test_build_plist_runs_recovery_boot_check_once_at_login(tmp_path):
+    plist = build_plist(
+        service="recovery",
+        python_executable="/opt/example/bin/python3",
+        home=tmp_path,
+    )
+
+    assert plist["Label"] == LAUNCHD_RECOVERY_LABEL
+    assert plist["RunAtLoad"] is True
+    assert plist["KeepAlive"] is False
+    assert plist["ProgramArguments"] == [
+        "/opt/example/bin/python3",
+        "-m",
+        "tmux_monitor.cli",
+        "recovery",
+        "boot-check",
+    ]
+    assert plist["StandardOutPath"] == str(tmp_path / ".local" / "log" / "tmux-monitor-recovery.out.log")
+    assert plist["StandardErrorPath"] == str(tmp_path / ".local" / "log" / "tmux-monitor-recovery.err.log")
 
 
 def test_write_plist_round_trips(tmp_path):

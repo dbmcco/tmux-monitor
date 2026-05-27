@@ -79,6 +79,11 @@ tmux-monitor logs "fresh_7.1"
 # Web dashboard (Streamlit) — http://100.77.214.44:8901 on Tailscale
 tmux-monitor web --port 8901
 
+# Unexpected restart recovery
+tmux-monitor recovery report
+tmux-monitor recovery script --output restore.sh
+tmux-monitor launchd install --service recovery
+
 # Stop daemon
 tmux-monitor stop
 ```
@@ -100,15 +105,30 @@ After tmux server dies or machine reboots, recover context:
 ```bash
 tmux-monitor resume-snapshot              # Show last-known agent state
 tmux-monitor resume-snapshot --generate-script  # Create tmux layout script
+tmux-monitor recovery report              # Rich restart recovery report
+tmux-monitor recovery script --output restore.sh # Restore layout only
 ```
 
 The monitor persists a `resume-manifest.json` after every heartbeat. It captures:
 - Session names, window counts, pane IDs
 - Agent type (codex, opencode, claude)
 - Working directory and last task summary
+- Pane log path and recent pane tail
+- Lightweight git state for each pane's cwd
+- Auto-resume safety reasons
 - Best-effort resume command for each agent
 
 **Important:** The generated script recreates tmux sessions and cds into the right directories, but does NOT auto-start agents. You review and run it manually, then decide whether to resume each agent with its CLI's native `--resume` flag.
+
+Install the login-time recovery checker with:
+
+```bash
+tmux-monitor launchd install --service recovery
+```
+
+The recovery LaunchAgent runs once at login, writes
+`~/.local/share/driftdriver/tmux-monitor/recovery-report.txt` when a manifest is
+available, and does not relaunch agents.
 
 ### Hygiene (Stale Pane Cleanup)
 

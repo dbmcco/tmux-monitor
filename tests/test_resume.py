@@ -1,7 +1,15 @@
 import json
 from pathlib import Path
 
-from tmux_monitor.resume import build_resume_manifest, write_resume_manifest, read_resume_manifest, format_snapshot_text, generate_resume_script
+from tmux_monitor.resume import (
+    build_resume_manifest,
+    format_recovery_report,
+    format_snapshot_text,
+    generate_recovery_script,
+    generate_resume_script,
+    read_resume_manifest,
+    write_resume_manifest,
+)
 from tmux_monitor.config import TmuxMonitorConfig
 from tmux_monitor.detection import PaneClassification
 
@@ -52,6 +60,115 @@ def test_build_resume_manifest_filters_shells():
     panes_data = manifest["sessions"]["sess1"]["panes"]
     assert "sess1:0.0" in panes_data
     assert "sess1:0.1" not in panes_data
+
+
+def test_build_resume_manifest_includes_pane_tail_log_path_and_git_state(tmp_path):
+    """Recovery manifest captures enough local state to orient post-reboot agents."""
+    from tmux_monitor.discovery import PaneInfo
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    (repo / "README.md").write_text("hello\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    (repo / "README.md").write_text("hello\nchanged\n", encoding="utf-8")
+
+    pane = PaneInfo(
+        session="work",
+        window=2,
+        pane_index=1,
+        pane_id="%9",
+        tty="/dev/ttys009",
+        cwd=str(repo),
+        title="codex",
+        current_command="codex",
+        window_name="recover",
+    )
+
+    manifest = build_resume_manifest(
+        {"work": [pane]},
+        {"%9": PaneClassification(pane_type="codex", process_name="codex", pid=123, tty="/dev/ttys009", title="codex")},
+        {"work:2.1": {"current_task": "building recovery", "summary": "Implementing restart recovery."}},
+        {"work:2.1": "2026-05-27T10:00:00+00:00"},
+        {"work": "2026-05-27T09:00:00+00:00"},
+        pane_tails={"work:2.1": "last visible pane text"},
+        pane_log_paths={"work:2.1": tmp_path / "panes" / "work_2.1.log"},
+    )
+
+    entry = manifest["sessions"]["work"]["panes"]["work:2.1"]
+    assert entry["window_name"] == "recover"
+    assert entry["pane_tail"] == "last visible pane text"
+    assert entry["pane_log_path"].endswith("work_2.1.log")
+    assert entry["git"]["is_repo"] is True
+    assert entry["git"]["dirty"] is True
+    assert entry["auto_resume"]["safe"] is False
+    assert "dirty git worktree" in entry["auto_resume"]["reasons"]
+
+
+def test_format_recovery_report_surfaces_boot_context_and_next_actions():
+    manifest = {
+        "last_heartbeat_at": "2026-05-27T14:32:00+00:00",
+        "host": "bmbp",
+        "boot_id": "boot-a",
+        "sessions": {
+            "work": {
+                "created_at": "",
+                "windows": 1,
+                "panes": {
+                    "work:2.1": {
+                        "type": "codex",
+                        "cwd": "/tmp/repo",
+                        "last_task": "building recovery",
+                        "summary": "Implementing restart recovery.",
+                        "pane_log_path": "/tmp/panes/work_2.1.log",
+                        "auto_resume": {"safe": False, "reasons": ["dirty git worktree"]},
+                    }
+                },
+            }
+        },
+    }
+
+    report = format_recovery_report(manifest)
+
+    assert "Last heartbeat: 2026-05-27T14:32:00+00:00" in report
+    assert "Host: bmbp" in report
+    assert "work:2.1 [codex]" in report
+    assert "building recovery" in report
+    assert "dirty git worktree" in report
+    assert "tmux-monitor recovery script" in report
+
+
+def test_generate_recovery_script_recreates_windows_without_starting_agents():
+    manifest = {
+        "last_heartbeat_at": "2026-05-27T14:32:00+00:00",
+        "sessions": {
+            "work": {
+                "created_at": "",
+                "windows": 2,
+                "panes": {
+                    "work:2.1": {
+                        "type": "codex",
+                        "cwd": "/tmp/repo",
+                        "window": 2,
+                        "pane": 1,
+                        "window_name": "recover",
+                        "resume_command": "cd /tmp/repo && codex --resume",
+                    }
+                },
+            }
+        },
+    }
+
+    script = generate_recovery_script(manifest)
+
+    assert "tmux new-session -d -s 'work' -n 'recover' -c '/tmp/repo'" in script
+    assert "codex --resume" not in script
+    assert "Post-restart recovery" in script
 
 
 def test_format_snapshot_text():

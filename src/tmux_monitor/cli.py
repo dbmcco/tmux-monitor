@@ -15,7 +15,13 @@ from tmux_monitor.relevance import (
     format_relevant_json,
     format_relevant_text,
 )
-from tmux_monitor.resume import read_resume_manifest, format_snapshot_text, generate_resume_script
+from tmux_monitor.resume import (
+    format_recovery_report,
+    format_snapshot_text,
+    generate_recovery_script,
+    generate_resume_script,
+    read_resume_manifest,
+)
 from tmux_monitor.hygiene import find_stale_panes, format_stale_report, kill_panes
 from tmux_monitor.discovery import discover_all, capture_pane
 from tmux_monitor.detection import classify_pane
@@ -212,6 +218,63 @@ def cmd_resume_snapshot(args: argparse.Namespace) -> int:
     return 0
 
 
+def _require_manifest(config: TmuxMonitorConfig) -> dict | None:
+    manifest = read_resume_manifest(config)
+    if manifest is None:
+        print("No recovery manifest found. Has the daemon ever run a heartbeat?", file=sys.stderr)
+        return None
+    return manifest
+
+
+def cmd_recovery_snapshot(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    manifest = _require_manifest(config)
+    if manifest is None:
+        return 1
+    print(format_snapshot_text(manifest))
+    return 0
+
+
+def cmd_recovery_report(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    manifest = _require_manifest(config)
+    if manifest is None:
+        return 1
+    print(format_recovery_report(manifest))
+    return 0
+
+
+def cmd_recovery_script(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    manifest = _require_manifest(config)
+    if manifest is None:
+        return 1
+    script = generate_recovery_script(manifest)
+    output = getattr(args, "output", None)
+    if output:
+        out_path = Path(output).expanduser()
+    else:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        out_path = Path.cwd() / f"tmux-recovery-{timestamp}.sh"
+    out_path.write_text(script + "\n", encoding="utf-8")
+    out_path.chmod(0o755)
+    print(f"Recovery script written to: {out_path}")
+    print("Review it before running. It recreates layout but does NOT start agents.")
+    return 0
+
+
+def cmd_recovery_boot_check(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    manifest = read_resume_manifest(config)
+    if manifest is None:
+        return 0
+    report = format_recovery_report(manifest)
+    report_path = config.state_dir / "recovery-report.txt"
+    report_path.write_text(report + "\n", encoding="utf-8")
+    print(f"Recovery report written to: {report_path}")
+    return 0
+
+
 def cmd_cleanup(args: argparse.Namespace) -> int:
     config = _load_config(args)
     days = getattr(args, "days", 2)
@@ -343,6 +406,22 @@ def main(argv: list[str] | None = None) -> int:
     resume.add_argument("--generate-script", action="store_true", help="Generate a shell script to recreate tmux sessions")
     resume.set_defaults(func=cmd_resume_snapshot)
 
+    recovery = sub.add_parser("recovery", help="Inspect or generate restart recovery artifacts")
+    recovery_sub = recovery.add_subparsers(dest="recovery_action", required=True)
+
+    recovery_snapshot = recovery_sub.add_parser("snapshot", help="Show last-known agent pane state")
+    recovery_snapshot.set_defaults(func=cmd_recovery_snapshot)
+
+    recovery_report = recovery_sub.add_parser("report", help="Show restart recovery report")
+    recovery_report.set_defaults(func=cmd_recovery_report)
+
+    recovery_script = recovery_sub.add_parser("script", help="Write a tmux layout recovery script")
+    recovery_script.add_argument("--output", help="Output script path")
+    recovery_script.set_defaults(func=cmd_recovery_script)
+
+    recovery_boot = recovery_sub.add_parser("boot-check", help="Write a recovery report at login if a manifest exists")
+    recovery_boot.set_defaults(func=cmd_recovery_boot_check)
+
     cleanup = sub.add_parser("cleanup", help="Detect and optionally kill stale agent panes")
     cleanup.add_argument("--days", type=int, default=2, help="Idle threshold in days (default: 2)")
     cleanup.add_argument("--approve", action="store_true", help="Actually kill stale panes (default: dry-run)")
@@ -352,7 +431,7 @@ def main(argv: list[str] | None = None) -> int:
     launchd_sub = launchd.add_subparsers(dest="launchd_action", required=True)
 
     launchd_install = launchd_sub.add_parser("install", help="Install and start the LaunchAgent")
-    launchd_install.add_argument("--service", choices=["monitor", "web"], default="monitor", help="LaunchAgent to install")
+    launchd_install.add_argument("--service", choices=["monitor", "web", "recovery"], default="monitor", help="LaunchAgent to install")
     launchd_install.add_argument("--python", help="Python executable for launchd (default: current interpreter)")
     launchd_install.add_argument("--plist-path", help="Override plist output path")
     launchd_install.add_argument("--port", type=int, default=8901, help="Web UI port when --service web (default: 8901)")
@@ -360,13 +439,13 @@ def main(argv: list[str] | None = None) -> int:
     launchd_install.set_defaults(func=cmd_launchd_install)
 
     launchd_uninstall = launchd_sub.add_parser("uninstall", help="Unload and remove the LaunchAgent")
-    launchd_uninstall.add_argument("--service", choices=["monitor", "web"], default="monitor", help="LaunchAgent to remove")
+    launchd_uninstall.add_argument("--service", choices=["monitor", "web", "recovery"], default="monitor", help="LaunchAgent to remove")
     launchd_uninstall.add_argument("--plist-path", help="Override plist path")
     launchd_uninstall.add_argument("--no-unload", action="store_true", help="Remove plist without calling launchctl")
     launchd_uninstall.set_defaults(func=cmd_launchd_uninstall)
 
     launchd_status_parser = launchd_sub.add_parser("status", help="Print launchd status for the LaunchAgent")
-    launchd_status_parser.add_argument("--service", choices=["monitor", "web"], default="monitor", help="LaunchAgent to inspect")
+    launchd_status_parser.add_argument("--service", choices=["monitor", "web", "recovery"], default="monitor", help="LaunchAgent to inspect")
     launchd_status_parser.set_defaults(func=cmd_launchd_status)
 
     args = p.parse_args(argv)

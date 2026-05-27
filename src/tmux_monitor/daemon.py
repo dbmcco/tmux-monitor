@@ -50,6 +50,7 @@ def run_heartbeat(config: TmuxMonitorConfig) -> dict[str, Any]:
 
     current_pane_ids: dict[str, list[str]] = {}
     classifications: dict[str, Any] = {}
+    pane_tails: dict[str, str] = {}
     summaries: dict[str, dict[str, Any]] = known.get("summaries", {})
     active_since: dict[str, str] = known.get("active_since", {})
     session_created_at: dict[str, str] = known.get("session_created_at", {})
@@ -93,6 +94,7 @@ def run_heartbeat(config: TmuxMonitorConfig) -> dict[str, Any]:
                 events_emitted.append(f"pane.created:{pane.qualified_id}")
 
             content = capture_pane(pane.pane_id, lines=200)
+            pane_tails[pane.qualified_id] = content
             prev_cls = known.get("classifications", {}).get(pane.pane_id, {})
             cls = classify_pane(
                 content, pane.tty,
@@ -196,6 +198,7 @@ def run_heartbeat(config: TmuxMonitorConfig) -> dict[str, Any]:
         summaries,
         active_since,
         session_created_at=session_created_at,
+        pane_tails=pane_tails,
     )
 
     return {

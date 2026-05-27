@@ -56,6 +56,73 @@ def test_resume_snapshot_with_manifest(tmp_path, capsys):
     assert "testing" in captured.out
 
 
+def test_recovery_report_with_manifest(tmp_path, capsys):
+    config = TmuxMonitorConfig()
+    config.state_dir = tmp_path
+    manifest = {
+        "last_heartbeat_at": "2026-05-27T14:32:00+00:00",
+        "host": "bmbp",
+        "sessions": {
+            "test": {
+                "created_at": "",
+                "windows": 1,
+                "panes": {
+                    "test:0.0": {
+                        "type": "codex",
+                        "cwd": "/tmp",
+                        "last_task": "testing recovery",
+                        "summary": "summary text",
+                        "auto_resume": {"safe": False, "reasons": ["manual approval required"]},
+                    }
+                },
+            }
+        },
+    }
+    config.resume_manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with patch("sys.argv", ["tmux-monitor", "--state-dir", str(tmp_path), "recovery", "report"]):
+        rc = main()
+
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "Recovery Report" in captured.out
+    assert "testing recovery" in captured.out
+
+
+def test_recovery_script_writes_requested_output_path(tmp_path, capsys):
+    config = TmuxMonitorConfig()
+    config.state_dir = tmp_path
+    manifest = {
+        "last_heartbeat_at": "2026-05-27T14:32:00+00:00",
+        "sessions": {
+            "test": {
+                "created_at": "",
+                "windows": 1,
+                "panes": {
+                    "test:0.0": {
+                        "type": "codex",
+                        "cwd": "/tmp",
+                        "window": 0,
+                        "pane": 0,
+                        "window_name": "main",
+                    }
+                },
+            }
+        },
+    }
+    config.resume_manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    output = tmp_path / "restore.sh"
+
+    with patch("sys.argv", ["tmux-monitor", "--state-dir", str(tmp_path), "recovery", "script", "--output", str(output)]):
+        rc = main()
+
+    assert rc == 0
+    assert output.exists()
+    assert "tmux new-session" in output.read_text(encoding="utf-8")
+    captured = capsys.readouterr()
+    assert str(output) in captured.out
+
+
 def test_resume_snapshot_generate_script(tmp_path, capsys):
     """resume-snapshot --generate-script writes a .sh file."""
     config = TmuxMonitorConfig()
