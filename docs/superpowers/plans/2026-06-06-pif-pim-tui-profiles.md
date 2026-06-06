@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Create `pif` as a desktop Pi cockpit profile and keep `pim` as a pure mobile Pi profile with shared sessions/settings.
+**Goal:** Create `pif` as a desktop Pi cockpit profile and keep `pim` as a less-chrome mobile Pi profile with shared sessions/settings.
 
-**Architecture:** Use shell functions as profile entrypoints. Keep global Pi settings unchanged, and layer desktop-only resources onto `pif` with a custom theme file and a single dashboard extension loaded via CLI flags.
+**Architecture:** Use shell functions as profile entrypoints. Keep global Pi settings unchanged, layer desktop-only resources onto `pif`, and load a mobile-only visual minimizer for `pim` without reducing capabilities.
 
 **Tech Stack:** zsh shell functions, Pi TypeScript extension API, Pi JSON themes, Node-based validation scripts.
 
@@ -16,6 +16,8 @@
   - Complete warm dark Pi theme with all required color tokens.
 - Create: `~/.pi/agent/extensions/pif-dashboard.ts`
   - Desktop-only Pi extension with compact footer/status and command.
+- Create: `~/.pi/agent/extensions/pim-minimal.ts`
+  - Mobile-only visual minimizer that hides footer/working chrome without changing capabilities.
 - Modify: `~/.zshrc`
   - Replace `alias pim='pi --mobile'` with `pif()` and `pim()` shell functions.
 - Create: `docs/superpowers/plans/2026-06-06-pif-pim-tui-profiles.md`
@@ -38,6 +40,7 @@ import path from 'node:path';
 const home = os.homedir();
 const themePath = path.join(home, '.pi/agent/themes/pif-espresso.json');
 const extensionPath = path.join(home, '.pi/agent/extensions/pif-dashboard.ts');
+const mobileExtensionPath = path.join(home, '.pi/agent/extensions/pim-minimal.ts');
 const zshrcPath = path.join(home, '.zshrc');
 
 const requiredColors = [
@@ -68,13 +71,20 @@ assert(extension.includes('setStatus'), 'Extension must set status indicators');
 assert(extension.includes('registerCommand("pif-status"'), 'Extension must register /pif-status');
 assert(extension.includes('default function'), 'Extension must export default function');
 
+assert(fs.existsSync(mobileExtensionPath), `Missing mobile extension: ${mobileExtensionPath}`);
+const mobileExtension = fs.readFileSync(mobileExtensionPath, 'utf8');
+assert(mobileExtension.includes('setWorkingVisible(false)'), 'pim extension must hide working row');
+assert(mobileExtension.includes('setWorkingIndicator({ frames: [] })'), 'pim extension must hide working indicator');
+assert(mobileExtension.includes('setFooter(() => new EmptyFooter())'), 'pim extension must remove footer chrome');
+
 const zshrc = fs.readFileSync(zshrcPath, 'utf8');
 assert(!zshrc.includes("alias pim='pi --mobile'"), 'Old pim alias must be removed');
 assert(zshrc.includes('pif() {'), 'Missing pif shell function');
 assert(zshrc.includes('--theme ~/.pi/agent/themes/pif-espresso.json'), 'pif must load desktop theme');
 assert(zshrc.includes('--extension ~/.pi/agent/extensions/pif-dashboard.ts'), 'pif must load desktop extension');
 assert(zshrc.includes('pim() {'), 'Missing pim shell function');
-assert(zshrc.includes('pi --mobile "$@"'), 'pim must remain pure mobile');
+assert(zshrc.includes('--mobile'), 'pim must keep mobile mode');
+assert(zshrc.includes('--extension ~/.pi/agent/extensions/pim-minimal.ts'), 'pim must load minimal chrome extension');
 
 console.log('pif/pim validation passed');
 ```
@@ -87,7 +97,7 @@ Run:
 node /tmp/validate-pif-pim.mjs
 ```
 
-Expected: FAIL because `pif-espresso.json` and/or `pif-dashboard.ts` do not exist yet and `~/.zshrc` still has the old `pim` alias.
+Expected: FAIL because `pif-espresso.json`, `pif-dashboard.ts`, and/or `pim-minimal.ts` do not exist yet and `~/.zshrc` still has the old `pim` alias.
 
 ## Task 2: Theme
 
@@ -149,7 +159,23 @@ grep -E 'setFooter|setStatus|registerCommand\("pif-status"|default function' ~/.
 
 Expected: all four patterns are present.
 
-## Task 4: Shell Functions
+## Task 4: Mobile Minimal Extension
+
+**Files:**
+- Create: `~/.pi/agent/extensions/pim-minimal.ts`
+
+- [ ] **Step 1: Write extension**
+
+Create a TypeScript Pi extension that:
+
+- exports `default function pimMinimal(pi: ExtensionAPI)`
+- calls `ctx.ui.setWorkingVisible(false)` on session start
+- calls `ctx.ui.setWorkingIndicator({ frames: [] })` on session start
+- calls `ctx.ui.setFooter(() => new EmptyFooter())` on session start
+- registers `/pim-minimal` to reapply minimal chrome
+- does not change tools, models, thinking level, images, or sessions
+
+## Task 5: Shell Functions
 
 **Files:**
 - Modify: `~/.zshrc`
@@ -173,7 +199,10 @@ pif() {
 }
 
 pim() {
-  pi --mobile "$@"
+  pi \
+    --mobile \
+    --extension ~/.pi/agent/extensions/pim-minimal.ts \
+    "$@"
 }
 ```
 
@@ -187,7 +216,7 @@ zsh -n ~/.zshrc
 
 Expected: exit 0 and no output.
 
-## Task 5: Full Validation
+## Task 6: Full Validation
 
 **Files:**
 - Read/validate: `/tmp/validate-pif-pim.mjs`, `~/.zshrc`, theme, extension
@@ -217,7 +246,7 @@ Expected: both are shell functions, `pif` references `pif-espresso.json` and `pi
 Run:
 
 ```bash
-zsh -ic 'pif --help >/tmp/pif-help.txt 2>&1 && pim --help >/tmp/pim-help.txt 2>&1 && grep -q -- "--mobile" /tmp/pim-help.txt && echo cli-help-ok'
+zsh -ic 'pif --help >/tmp/pif-help.txt 2>&1 && pim --help >/tmp/pim-help.txt 2>&1 && grep -q -- "--mobile" /tmp/pim-help.txt && grep -q -- "pim-minimal" ~/.zshrc && echo cli-help-ok'
 ```
 
 Expected: `cli-help-ok`.
@@ -235,6 +264,6 @@ Expected: one commit containing the plan file. Do not add home-directory config 
 
 ## Self-Review
 
-- Spec coverage: the plan covers shared sessions, high thinking, scoped models unchanged, images unchanged, pure `pim`, desktop `pif`, warm theme, dashboard extension, shell functions, and validation.
+- Spec coverage: the plan covers shared sessions, high thinking, scoped models unchanged, images unchanged, less-chrome `pim`, desktop `pif`, warm theme, dashboard extension, shell functions, and validation.
 - Placeholder scan: no TBD/TODO placeholders remain.
 - Type consistency: extension uses documented Pi APIs: `ExtensionAPI`, `ctx.ui.setFooter`, `ctx.ui.setStatus`, `pi.registerCommand`, and session/turn events.

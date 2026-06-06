@@ -29,7 +29,7 @@ Existing global Pi settings in `~/.pi/agent/settings.json` already define:
 4. Keep images enabled.
 5. Keep global Pi configuration mostly unchanged.
 6. Replace the existing `pim` alias with shell functions so arguments pass through cleanly.
-7. Make `pim` pure mobile: `pi --mobile "$@"`.
+7. Make `pim` mobile-first with reduced visual chrome while preserving capabilities.
 8. Make `pif` desktop-only and richer by loading a desktop theme and dashboard extension.
 9. Use a warm dark visual family: espresso/brown base with orange/gold accents.
 10. Avoid cluttering the main chat; dashboard additions should be compact and useful.
@@ -42,18 +42,24 @@ Existing global Pi settings in `~/.pi/agent/settings.json` already define:
 - No lowering thinking level for mobile.
 - No disabling images for mobile.
 - No persistent mobile dashboard widgets.
+- No mobile capability reduction; minimal means less chrome, not fewer tools/models/extensions.
 
 ## Profile Design
 
 ### `pim`: Mobile Profile
 
-`pim` remains the clean small-screen launcher:
+`pim` remains the clean small-screen launcher and adds only a visual-minimizer extension:
 
 ```sh
-pim() { pi --mobile "$@"; }
+pim() {
+  pi \
+    --mobile \
+    --extension ~/.pi/agent/extensions/pim-minimal.ts \
+    "$@"
+}
 ```
 
-It intentionally does not load custom extensions, widgets, or a separate session directory. It inherits global Pi defaults.
+It intentionally does not change tools, models, thinking level, images, or session storage. It inherits global Pi defaults and uses `pim-minimal.ts` only to reduce TUI chrome.
 
 ### `pif`: Desktop Profile
 
@@ -103,17 +109,18 @@ Style:
 - green success and clear red error states
 - strong enough contrast for desktop work
 
-A calmer mobile sibling theme (`pim-espresso`) can be added later, but `pim` should initially remain pure `pi --mobile` with no custom theme unless Braydon asks for it.
+A calmer mobile sibling theme (`pim-espresso`) can be added later, but `pim` should not use a custom theme by default unless Braydon asks for it.
 
 ## Implementation Plan Summary
 
 1. Create `pif-espresso.json` theme.
 2. Create `pif-dashboard.ts` extension.
-3. Update `~/.zshrc`:
+3. Create `pim-minimal.ts` visual-minimizer extension.
+4. Update `~/.zshrc`:
    - remove `alias pim='pi --mobile'`
    - add `pif()` shell function
    - add `pim()` shell function
-4. Validate:
+5. Validate:
    - `pif --help` starts Pi help path with the desktop resources accepted
    - `pim --help` confirms mobile flag path still works
    - extension TypeScript imports resolve under Pi
@@ -128,4 +135,4 @@ A calmer mobile sibling theme (`pim-espresso`) can be added later, but `pim` sho
 
 ## Open Decisions
 
-None. The user approved the recommended approach: shared config, pure mobile `pim`, desktop dashboard `pif`, shell functions, warm dark theme family.
+None. The user approved the recommended approach: shared config, less-chrome mobile `pim`, desktop dashboard `pif`, shell functions, warm dark theme family.
