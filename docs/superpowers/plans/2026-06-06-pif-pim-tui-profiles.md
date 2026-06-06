@@ -217,7 +217,7 @@ Expected: both are shell functions, `pif` references `pif-espresso.json` and `pi
 Run:
 
 ```bash
-zsh -ic 'pif --help >/tmp/pif-help.txt && pim --help >/tmp/pim-help.txt && grep -q -- "--mobile" /tmp/pim-help.txt && echo cli-help-ok'
+zsh -ic 'pif --help >/tmp/pif-help.txt 2>&1 && pim --help >/tmp/pim-help.txt 2>&1 && grep -q -- "--mobile" /tmp/pim-help.txt && echo cli-help-ok'
 ```
 
 Expected: `cli-help-ok`.
